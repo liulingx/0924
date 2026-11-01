@@ -1,0 +1,82 @@
+{
+ "sampleRate": 48000,
+ "notes": [
+  {
+   "i": 0,
+   "note": "E4",
+   "start": 0.3,
+   "end": 3.7
+  },
+  {
+   "i": 1,
+   "note": "E4",
+   "start": 4.0,
+   "end": 7.4
+  },
+  {
+   "i": 2,
+   "note": "F#4",
+   "start": 7.7,
+   "end": 11.1
+  },
+  {
+   "i": 3,
+   "note": "E4",
+   "start": 11.4,
+   "end": 14.8
+  },
+  {
+   "i": 4,
+   "note": "A4",
+   "start": 15.1,
+   "end": 18.5
+  },
+  {
+   "i": 5,
+   "note": "G#4",
+   "start": 18.8,
+   "end": 22.2
+  },
+  {
+   "i": 6,
+   "note": "E4",
+   "start": 22.5,
+   "end": 25.9
+  },
+  {
+   "i": 7,
+   "note": "E4",
+   "start": 26.2,
+   "end": 29.6
+  },
+  {
+   "i": 8,
+   "note": "F#4",
+   "start": 29.9,
+   "end": 33.3
+  },
+  {
+   "i": 9,
+   "note": "E4",
+   "start": 33.6,
+   "end": 37.0
+  },
+  {
+   "i": 10,
+   "note": "B4",
+   "start": 37.3,
+   "end": 40.7
+  },
+  {
+   "i": 11,
+   "note": "A4",
+   "start": 41.0,
+   "end": 44.4
+  }
+ ],
+ "dawn": {
+  "firstPhraseEnd": 7.252,
+  "secondPassStart": 29.127,
+  "finalChord": 55.777
+ }
+}
