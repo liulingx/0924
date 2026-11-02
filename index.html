@@ -23,7 +23,7 @@ display:flex;flex-direction:column;align-items:center;text-align:center;
 padding:calc(env(safe-area-inset-top,0px) + clamp(52px,14.5vh,150px)) 28px calc(env(safe-area-inset-bottom,0px) + 20px);
 transition:opacity 1s ease,transform .32s ease;will-change:opacity}
 #door:before{content:"";position:absolute;left:50%;top:6%;width:min(150vw,920px);height:58%;transform:translateX(-50%);pointer-events:none;
-background:radial-gradient(closest-side,rgba(4,7,22,.5),rgba(4,7,22,.3) 55%,rgba(4,7,22,0));z-index:-1}
+background:radial-gradient(closest-side,rgba(4,7,22,.24),rgba(4,7,22,.12) 55%,rgba(4,7,22,0));z-index:-1}
 #door.gone{opacity:0;pointer-events:none}
 .c{display:inline-block}
 #small{margin:0;font-size:clamp(13px,3.6vw,15px);letter-spacing:.62em;margin-right:-.62em;color:var(--soft);
@@ -50,7 +50,8 @@ background:rgba(14,20,52,.3);color:var(--ink);font:inherit;font-size:17px;letter
 -webkit-appearance:none;appearance:none;transition:background .3s ease,border-color .3s ease,opacity .3s ease,box-shadow .3s ease}
 #go:hover{border-color:rgba(255,220,170,.66)}
 #go:active{background:rgba(255,226,180,.14);box-shadow:0 0 18px rgba(255,220,170,.22)}
-#go[disabled]{opacity:.5}
+#go[disabled]{opacity:.5;animation:wait 1.6s ease-in-out infinite}
+@keyframes wait{50%{opacity:.26}}
 #msg{margin:clamp(12px,1.9vh,18px) 0 0;min-height:3.5em;font-size:clamp(14px,3.9vw,16px);line-height:1.75;letter-spacing:.04em;
 color:#ffe6c4;text-shadow:0 0 14px rgba(6,10,30,.96);opacity:0;transition:opacity .5s ease}
 #msg.show{opacity:1}
@@ -60,11 +61,15 @@ text-shadow:0 0 8px rgba(3,5,18,1),0 0 18px rgba(3,5,18,.95)}
 #door:after{content:"";position:absolute;left:0;right:0;bottom:0;height:17%;pointer-events:none;z-index:-1;
 background:linear-gradient(transparent,rgba(4,6,20,.62))}
 .rise{opacity:0;animation:rise 1.6s ease forwards}
-.d1{animation-delay:.5s}.d2{animation-delay:.8s}.d3{animation-delay:1.3s}.d4{animation-delay:1.9s}
+.d2{animation-delay:1.35s}.d4{animation-delay:2s}
+.ltr{display:inline-block;opacity:0;animation:ltr 1.1s ease forwards}
+.ltr:nth-child(1){animation-delay:.5s}.ltr:nth-child(2){animation-delay:.68s}.ltr:nth-child(3){animation-delay:.86s}.ltr:nth-child(4){animation-delay:1.04s}
+@keyframes ltr{from{opacity:0;filter:blur(6px);transform:translateY(6px)}to{opacity:1;filter:blur(0);transform:none}}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .shake{animation:shake .46s ease}
 @keyframes shake{20%{transform:translateX(-7px)}45%{transform:translateX(5px)}70%{transform:translateX(-3px)}100%{transform:none}}
-body.open #gate{opacity:0;transform:translateY(-6px);pointer-events:none}
+body.open #gate{pointer-events:none}
+body.open #q,body.open #field,body.open #go{opacity:0;animation:none;transition:opacity .5s ease}
 body.open #msg{opacity:1}
 body.kb #foot{opacity:0}
 @media (max-height:600px){
@@ -84,7 +89,7 @@ body.kb #foot{opacity:0}
 #foot{display:none}
 }
 @media (prefers-reduced-motion:reduce){
-.rise{animation-duration:.4s;animation-delay:0s}
+.rise,.ltr{animation-duration:.4s;animation-delay:0s}
 .shake{animation:none}
 }
 </style>
@@ -93,7 +98,7 @@ body.kb #foot{opacity:0}
 <canvas id="sky" aria-hidden="true"></canvas>
 <main id="door">
   <p id="small" class="rise">九月廿四</p>
-  <h1 id="big" class="rise d1">闲人免进</h1>
+  <h1 id="big"><span class="ltr">闲</span><span class="ltr">人</span><span class="ltr">免</span><span class="ltr">进</span></h1>
   <form id="gate" class="rise d2" autocomplete="off" novalidate>
     <p id="q"><span class="c">暗号：你第一次喝醉，</span><span class="c">管人家叫什么？</span></p>
     <div id="field">
@@ -108,6 +113,8 @@ body.kb #foot{opacity:0}
 'use strict';
 var TAU = Math.PI * 2;
 var NAMES = ['night', 'deep', 'predawn', 'dawn', 'morning'];
+var FG_KINDS = ['night', 'dawn'];
+var CAM = { over: 1.32, anchor: 0.94, pan: 0.275, far: 1, mid: 1.14, near: 1.3, cloud: 1.16, fgMin: 1.4, ext: 0.42 };
 var PAL = {
 night: {
 stops: [[0, '#040716'], [0.26, '#070e27'], [0.52, '#0d1639'], [0.76, '#16204d'], [1, '#1f2758']],
@@ -185,6 +192,7 @@ stars: null, far: null, bloomFar: null, milky: null,
 cloudCool: null, cloudWarm: null, cloudX: 0,
 sprites: [], meteors: [], motes: [], lights: [],
 px: 0, py: 0, tilt: null, pointer: null,
+camV: null, camS: 0, cam: { sky: 0, fg: 0, fgMax: 0, late: 0 }, lateHold: 0,
 horizon: 0.74, frames: 0, acc: 0, fps: 0, settle: 0, slow: 0, probe: null, noDrop: false,
 reduced: false, idleQueue: [], grain: null, vignette: null,
 glow: null, disc: null, band: null, rays: null, warmSpot: null, ctxLost: false
@@ -380,6 +388,7 @@ return c;
 function buildStars() {
 var r = rng32(2411), W = S.W, H = S.H, sc = clamp(W * H / (390 * 844), 0.8, 2.2);
 var bd = bandOf(), ca = Math.cos(bd.ang), sa = Math.sin(bd.ang);
+var bandCy = (bd.cy + 0.042) / 1.07 * CAM.over - (CAM.over - 1) * CAM.anchor;
 function pos() {
 var y = Math.pow(r(), 1.25) * 0.94 - 0.03;
 return [r() * 1.14 - 0.07, y];
@@ -387,14 +396,15 @@ return [r() * 1.14 - 0.07, y];
 function bandPos() {
 var along = (r() - 0.5) * 1.7, side = (r() + r() + r() - 1.5) * 0.14;
 var asp = W / H, x = along * ca - side * sa, y = along * sa + side * ca;
-return [0.5 + x / asp, bd.cy + y];
+return [0.5 + x / asp, bandCy + y];
 }
+function upper() { return [r() * 1.14 - 0.07, -0.03 - r() * (CAM.ext - 0.03)]; }
 function tint() {
 var k = r();
 return k < 0.2 ? 0 : k < 0.5 ? 1 : k < 0.74 ? 2 : k < 0.92 ? 3 : 4;
 }
 function one(pw, rMin, rMax, aMin, aMax, band) {
-var p = band ? bandPos() : pos(), k = Math.pow(r(), pw);
+var p = band === 2 ? upper() : band ? bandPos() : pos(), k = Math.pow(r(), pw);
 return {
 x: p[0], y: p[1], r: lerp(rMin, rMax, k), a: lerp(aMin, aMax, k), c: tint(),
 f: 0.45 + r() * 1.7, p: r() * TAU, amp: 0.12 + r() * 0.34, th: r()
@@ -404,17 +414,20 @@ var i, mid = [], near = [], blo = [];
 for (i = 0; i < 210 * sc; i++) mid.push(one(2.2, 0.9, 2.0, 0.34, 0.95, i % 3 === 0));
 for (i = 0; i < 40 * sc; i++) near.push(one(2.6, 2.1, 4.8, 0.6, 1));
 for (i = 0; i < 190 * sc; i++) blo.push(one(1.8, 0.9, 3.4, 0.4, 1, i % 2 === 0));
+for (i = 0; i < 88 * sc; i++) mid.push(one(2.2, 0.9, 2.0, 0.34, 0.95, 2));
+for (i = 0; i < 17 * sc; i++) near.push(one(2.6, 2.1, 4.8, 0.6, 1, 2));
+for (i = 0; i < 80 * sc; i++) blo.push(one(1.8, 0.9, 3.4, 0.4, 1, 2));
 S.stars = { mid: mid, near: near, bloom: blo };
 var b = 2;
-S.far = paintFar(W, H, b, 1300 * sc, 0.5, r, pos, bandPos);
-S.bloomFar = paintFar(W, H, b, 1500 * sc, 0.72, r, pos, bandPos);
+S.far = paintFar(W, H, b, 1300 * sc, 0.5, r, pos, bandPos, upper);
+S.bloomFar = paintFar(W, H, b, 1500 * sc, 0.72, r, pos, bandPos, upper);
 }
-function paintFar(W, H, b, n, bandShare, r, pos, bandPos) {
-var c = mk(W * 1.14 * b, H * 1.0 * b), g = c.getContext('2d');
+function paintFar(W, H, b, n, bandShare, r, pos, bandPos, upper) {
+var c = mk(W * 1.14 * b, H * (1 + CAM.ext) * b), g = c.getContext('2d');
 var tints = ['#c8d6ff', '#e4ebff', '#ffffff', '#fff0da', '#ffdcb8'];
-for (var i = 0; i < n; i++) {
-var p = r() < bandShare ? bandPos() : pos(), k = Math.pow(r(), 3);
-var x = (p[0] + 0.07) / 1.14 * c.width, y = p[1] * c.height;
+for (var i = 0; i < n * (1 + CAM.ext); i++) {
+var p = i >= n ? upper() : r() < bandShare ? bandPos() : pos(), k = Math.pow(r(), 3);
+var x = (p[0] + 0.07) / 1.14 * c.width, y = (p[1] + CAM.ext) / (1 + CAM.ext) * c.height;
 var hf = 1 - sstep(0.62, 0.9, p[1]);
 if (hf <= 0) continue;
 g.globalAlpha = lerp(0.14, 0.82, k) * hf;
@@ -569,7 +582,7 @@ g.quadraticCurveTo(ex + 12 * sc, ey - 5 * sc, ex + 24 * sc, ey - 4 * sc);
 g.closePath(); g.fill();
 var px = W * 0.53;
 drawPeople(g, W, H, px, ridgeAt(px) + 1, 48 * sc, C.people, C.rim);
-if (!dawn) S.horizon = (ridgeAt(W * 0.6) / H);
+if (!dawn) { S.horizon = (ridgeAt(W * 0.6) / H); S.ridge = ridgeAt; }
 return c;
 }
 function urlOf(key, set) {
@@ -598,9 +611,10 @@ attempt(first, second);
 function queuePlates() {
 var order = ['night', 'fg-night', 'deep', 'predawn', 'dawn', 'fg-dawn'], i = 0, live = 0;
 function pump() {
-while (live < 2 && i < order.length) go(order[i++]);
+while (live < 2 && i < Math.min(order.length, S.plateMax)) go(order[i++]);
 if (!live && i >= order.length) { clearTimeout(S.idleTimer); S.idleTimer = 0; runIdle(60); }
 }
+S.pump = pump;
 function go(key) {
 live++;
 fetchPlate(key, function (pl) {
@@ -613,6 +627,7 @@ pump();
 }
 function adopt(key, pl) {
 pl.fade.go(1, S.T < 0.3 ? 0 : 1.8);
+if (key === 'fg-dawn' && pl.set === 'portrait') pl.shift = 32 / 1536;
 if (key.indexOf('fg-') === 0) {
 S.fgPlates[key.slice(3)] = pl;
 measureFg(pl);
@@ -629,9 +644,9 @@ var c = mk(Math.min(pl.w, 900), Math.min(pl.w, 900) * pl.h / pl.w), g = c.getCon
 g.drawImage(pl.img, 0, 0, c.width, c.height);
 g.globalCompositeOperation = 'screen';
 var l = g.createLinearGradient(0, 0, 0, c.height);
-l.addColorStop(0, 'rgba(112,166,226,.78)');
-l.addColorStop(0.5, 'rgba(232,216,206,.62)');
-l.addColorStop(1, 'rgba(255,232,196,.7)');
+l.addColorStop(0, 'rgba(120,150,220,.40)');
+l.addColorStop(0.5, 'rgba(244,196,160,.30)');
+l.addColorStop(1, 'rgba(255,214,160,.36)');
 g.fillStyle = l; g.fillRect(0, 0, c.width, c.height);
 S.plates.morning = { img: c, w: c.width, h: c.height, set: pl.set, fade: new Tween(1) };
 } catch (e) {  }
@@ -640,14 +655,19 @@ function measureFg(pl) {
 try {
 var w = 64, h = Math.round(64 * pl.h / pl.w), c = mk(w, h), g = c.getContext('2d');
 g.drawImage(pl.img, 0, 0, w, h);
-var d = g.getImageData(0, 0, w, h).data, top = h;
+var d = g.getImageData(0, 0, w, h).data, top = h, ink = h;
 for (var y = 0; y < h && top === h; y++) {
 var cnt = 0;
-for (var x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 200) cnt++;
+for (var x = 0; x < w; x++) {
+var al = d[(y * w + x) * 4 + 3];
+if (al > 200) cnt++;
+if (al > 8 && ink === h) ink = y;
+}
 if (cnt > w * 0.3) top = y;
 }
 pl.top = top / h;
-} catch (e) { pl.top = 0.7; }
+pl.ink = Math.max(0, ink - 1) / h;
+} catch (e) { pl.top = 0.7; pl.ink = 0.5; }
 }
 function makeMist(pl) {
 try {
@@ -666,6 +686,12 @@ var cnt = 0;
 if (sky[x] >= 0) for (y = sky[x]; y < Math.min(bh, sky[x] + 14); y++) if (lum((y * w + x) * 4) < 95) cnt++;
 dark[x] = cnt >= 7;
 if (dark[x]) { xa = Math.min(xa, x); xb = Math.max(xb, x); }
+}
+var need = Math.max(7, Math.round(h * 0.015));
+for (x = Math.round(w * 0.1); x < w * 0.9; x++) {
+var deep = 0;
+for (y = 0; y < bh; y++) { i = (y * w + x) * 4; if (d[i + 3] > 128 && lum(i) < 60) deep++; }
+if (deep >= need) { xa = Math.min(xa, x); xb = Math.max(xb, x); }
 }
 var last = -1;
 for (x = 0; x < w; x++) {
@@ -707,7 +733,7 @@ for (var xx = Math.max(0, x - grow); xx <= Math.min(w - 1, x + grow); xx++) pers
 }
 }
 }
-var up = Math.max(h * 0.04, w * 0.05), down = h * 0.055, A = 0.94;
+var up = h * 0.085, down = h * 0.055, A = 0.82;
 var soft = function (t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 for (y = 0; y < bh; y++) {
 for (x = 0; x < w; x++) {
@@ -729,20 +755,70 @@ pl.mist = { c: c, lit: c2, y: y0, h: bh };
 }
 function detectLights(pl) {
 try {
-var w = 180, h = Math.round(180 * pl.h / pl.w), c = mk(w, h), g = c.getContext('2d');
+var w = Math.min(pl.w, 1024), h = Math.round(w * pl.h / pl.w), c = mk(w, h), g = c.getContext('2d');
 g.drawImage(pl.img, 0, 0, w, h);
-var d = g.getImageData(0, 0, w, h).data, found = [], seen = {};
-for (var y = 1; y < h - 1; y++) {
-for (var x = 1; x < w - 1; x++) {
-var i = (y * w + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2], a = d[i + 3];
-if (a > 180 && r > 170 && gg > 110 && r > b * 1.5) {
-var k = (x >> 2) + ',' + (y >> 2);
-if (!seen[k]) { seen[k] = 1; found.push({ u: x / w, v: y / h, r: 12, p: x * 1.7, f: 0.2 + (y % 7) / 18 }); }
+var y0 = Math.floor(h * 0.45), hh = h - y0, d = g.getImageData(0, y0, w, hh).data;
+var cell = 6, gw = Math.ceil(w / cell), gh = Math.ceil(hh / cell), grid = new Uint16Array(gw * gh);
+var x, y, i;
+for (y = 0; y < hh; y++) {
+for (x = 0; x < w; x++) {
+i = (y * w + x) * 4;
+if (d[i + 3] > 150 && d[i] > 44 && d[i + 1] > d[i] * 0.5 && d[i] - d[i + 2] > 14 && d[i] > d[i + 2] * 1.45) {
+grid[(y / cell | 0) * gw + (x / cell | 0)]++;
 }
 }
 }
-pl.lights = found.slice(0, 16);
+var seen = new Uint8Array(gw * gh), blobs = [];
+for (i = 0; i < grid.length; i++) {
+if (seen[i] || grid[i] < 2) continue;
+var st = [i], b = { x0: gw, y0: gh, x1: 0, y1: 0, n: 0 };
+seen[i] = 1;
+while (st.length) {
+var q = st.pop(), qx = q % gw, qy = q / gw | 0;
+b.n += grid[q];
+b.x0 = Math.min(b.x0, qx); b.x1 = Math.max(b.x1, qx);
+b.y0 = Math.min(b.y0, qy); b.y1 = Math.max(b.y1, qy);
+for (var dy = -1; dy <= 1; dy++) {
+for (var dx = -1; dx <= 1; dx++) {
+var nx = qx + dx, ny = qy + dy, nn = ny * gw + nx;
+if (nx < 0 || ny < 0 || nx >= gw || ny >= gh || seen[nn] || grid[nn] < 2) continue;
+seen[nn] = 1;
+st.push(nn);
+}
+}
+}
+if (b.n >= 5) blobs.push(b);
+}
+blobs.sort(function (p, q) { return q.n - p.n; });
+var out = [], many = Math.min(blobs.length, 14);
+blobs.slice(0, many).forEach(function (b, idx) {
+var px = Math.max(0, b.x0 * cell - 3), py = Math.max(0, y0 + b.y0 * cell - 3);
+var pw = Math.min(w - px, (b.x1 - b.x0 + 1) * cell + 6), ph = Math.min(h - py, (b.y1 - b.y0 + 1) * cell + 6);
+out.push({
+u: (px + pw / 2) / w, v: (py + ph / 2) / h, r: clamp(6 + Math.sqrt(b.n) * 0.7, 8, 18),
+p: px * 1.7, f: 0.2 + (py % 7) / 18,
+k: idx === 0 ? 0 : 0.9 - 0.62 * (idx - 1) / Math.max(1, many - 2),
+box: [px / w, py / h, pw / w, ph / h], patch: lightPatch(c, px, py, pw, ph)
+});
+});
+pl.lights = out;
 } catch (e) { pl.lights = []; }
+}
+function lightPatch(src, x, y, w, h) {
+var c = mk(w, h), g = c.getContext('2d');
+g.drawImage(src, x, y, w, h, 0, 0, w, h);
+var im = g.getImageData(0, 0, w, h), d = im.data, sum = [0, 0, 0], n = 0, i;
+for (i = 0; i < d.length; i += 4) {
+if (d[i] - d[i + 2] < 6) { sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2]; n++; }
+}
+var base = n ? [sum[0] / n * 0.82, sum[1] / n * 0.82, sum[2] / n * 0.82] : [14, 18, 34];
+for (i = 0; i < d.length; i += 4) {
+var t = sstep(8, 30, d[i] - d[i + 2]);
+if (t <= 0) continue;
+d[i] = lerp(d[i], base[0], t); d[i + 1] = lerp(d[i + 1], base[1], t); d[i + 2] = lerp(d[i + 2], base[2], t);
+}
+g.putImageData(im, 0, 0);
+return c;
 }
 function measure() {
 var c = S.canvas, r = c.getBoundingClientRect();
@@ -812,9 +888,9 @@ var dw = iw * s, dh = ih * s;
 g.drawImage(img, (S.cw - dw) / 2 + ox, (S.ch - dh) * anchor + oy, dw, dh);
 }
 function drawSky(g) {
-var acc = 0, kb = S.reduced ? 1.07 : 1.07 + 0.015 * Math.sin(S.T / 70);
+var acc = 0, kb = S.reduced ? CAM.over : CAM.over + 0.015 * Math.sin(S.T / 70);
 S.kb = kb;
-var ox = S.px * 3 * S.dpr, oy = S.py * 2 * S.dpr;
+var ox = S.px * 3 * S.dpr, oy = S.py * 2 * S.dpr + S.cam.sky;
 g.globalCompositeOperation = 'source-over';
 for (var i = 0; i < NAMES.length; i++) {
 var n = NAMES[i], w = S.weights[n].v;
@@ -824,11 +900,11 @@ var a = w / acc, pl = S.plates[n], pf = pl ? pl.fade.v : 0;
 if (pf < 1) {
 var src = S.proc[n] || S.quick[n];
 g.globalAlpha = a;
-cover(g, src, src.width, src.height, ox, oy, kb, 0.6);
+cover(g, src, src.width, src.height, ox, oy, kb, CAM.anchor);
 }
 if (pl) {
 g.globalAlpha = a * pf;
-cover(g, pl.img, pl.w, pl.h, ox, oy, kb, 0.6);
+cover(g, pl.img, pl.w, pl.h, ox, oy, kb, CAM.anchor);
 }
 }
 g.globalAlpha = 1;
@@ -851,7 +927,7 @@ var bl = S.bloomV.v * clamp(vis * 1.1, 0, 1), deep = S.plates.deep;
 if (deep && bl > 0.01) {
 g.globalCompositeOperation = 'lighter';
 g.globalAlpha = 0.5 * bl * deep.fade.v;
-cover(g, deep.img, deep.w, deep.h, S.px * 3 * S.dpr, S.py * 2 * S.dpr, S.kb, 0.6);
+cover(g, deep.img, deep.w, deep.h, S.px * 3 * S.dpr, S.py * 2 * S.dpr + S.cam.sky, S.kb, CAM.anchor);
 g.globalAlpha = 1;
 g.globalCompositeOperation = 'source-over';
 }
@@ -860,8 +936,8 @@ var a = (milkyAmount() + (deep ? 0 : S.bloomV.v * 0.34)) * clamp(vis * 1.1, 0, 1
 if (a < 0.01) return;
 g.globalCompositeOperation = 'lighter';
 g.globalAlpha = clamp(a, 0, 1);
-var over = 1.1, dw = S.cw * over, dh = S.ch * over;
-g.drawImage(S.milky, (S.cw - dw) / 2 + S.px * 4 * S.dpr, (S.ch - dh) * 0.4 + S.py * 3 * S.dpr, dw, dh);
+var dw = S.cw * CAM.over, dh = S.ch * CAM.over;
+g.drawImage(S.milky, (S.cw - dw) / 2 + S.px * 4 * S.dpr, (S.ch - dh) * CAM.anchor + S.py * 3 * S.dpr + S.cam.sky, dw, dh);
 g.globalAlpha = 1;
 g.globalCompositeOperation = 'source-over';
 }
@@ -869,7 +945,7 @@ function drawClouds(g) {
 if (S.quality >= 2) return;
 var warm = amount('tint'), a = amount('cloudAmt') * 0.55;
 if (a < 0.02) return;
-var tw = S.cw * 2.1, th = S.ch * 0.8, y = S.ch * 0.02 + S.py * 3 * S.dpr;
+var tw = S.cw * 2.1, th = S.ch * 0.8, y = S.ch * 0.02 + S.py * 3 * S.dpr + S.cam.sky * CAM.cloud;
 var x = -(S.cloudX * S.dpr % tw);
 function pass(c, al) {
 if (!c || al < 0.01) return;
@@ -887,8 +963,9 @@ var T = S.T, dpr = S.dpr, W = S.W, H = S.H, lvl = clamp(vis, 0, 2), still = S.re
 var dx = still ? 0 : Math.sin(T / 150) * 14, dy = still ? 0 : Math.cos(T / 190) * 6;
 var bl = S.bloomV.v, soft = 1 - 0.34 * (S.plates.night ? S.plates.night.fade.v : 0);
 g.globalCompositeOperation = 'lighter';
-var fx = (-0.07 * W + S.px * 5 + dx * 0.5) * dpr, fy = (S.py * 3 + dy * 0.5) * dpr;
-var fw = W * 1.14 * dpr, fh = H * dpr;
+var fx = (-0.07 * W + S.px * 5 + dx * 0.5) * dpr;
+var fy = (S.py * 3 + dy * 0.5 - CAM.ext * H) * dpr + S.cam.sky * CAM.far;
+var fw = W * 1.14 * dpr, fh = H * (1 + CAM.ext) * dpr;
 if (S.far) {
 g.globalAlpha = Math.min(1, lvl) * soft;
 g.drawImage(S.far, fx, fy, fw, fh);
@@ -898,8 +975,8 @@ if (bl > 0.01 && S.bloomFar) {
 g.globalAlpha = Math.min(1, bl * 1.05 * Math.min(1, lvl));
 g.drawImage(S.bloomFar, fx, fy, fw, fh);
 }
-function layer(list, px, tw) {
-var ox = (S.px * px + dx * px / 10) * dpr, oy = (S.py * px * 0.6 + dy * px / 10) * dpr;
+function layer(list, px, tw, speed) {
+var ox = (S.px * px + dx * px / 10) * dpr, oy = (S.py * px * 0.6 + dy * px / 10) * dpr + S.cam.sky * speed;
 for (var i = 0; i < list.length; i++) {
 var s = list[i];
 var a = s.a * lvl * (1 - sstep(0.6, 0.9, s.y));
@@ -908,6 +985,7 @@ if (a <= 0.01) continue;
 var tk = still ? 1 : 1 + s.amp * Math.sin(T * s.f + s.p);
 var r = s.r * dpr * (1 + 0.25 * Math.max(0, lvl - 1)) * 2.7;
 var cx = (s.x * W) * dpr + ox, cy = (s.y * H) * dpr + oy;
+if (cy < -r * 2 || cy > S.ch + r * 2) continue;
 g.globalAlpha = Math.min(1, a * tk);
 g.drawImage(S.sprites[s.c], cx - r, cy - r, r * 2, r * 2);
 if (s.r > 3.5) {
@@ -917,9 +995,9 @@ g.drawImage(S.flare, cx - fr, cy - fr, fr * 2, fr * 2);
 }
 }
 }
-layer(S.stars.mid, 7, 1);
-layer(S.stars.near, 11, 1);
-if (bl > 0.01) layer(S.stars.bloom, 9, 2);
+layer(S.stars.mid, 7, 1, CAM.mid);
+layer(S.stars.near, 11, 1, CAM.near);
+if (bl > 0.01) layer(S.stars.bloom, 9, 2, CAM.mid);
 g.globalAlpha = 1;
 g.globalCompositeOperation = 'source-over';
 }
@@ -952,22 +1030,24 @@ g.globalAlpha = 1;
 g.globalCompositeOperation = 'source-over';
 }
 function sunPos() {
-var e = ease(clamp(S.sunV.v, 0, 1)), pl = S.fgPlates.dawn || S.fgPlates.night, hy = S.horizon * S.H, x = S.W * 0.53;
+var e = clamp(S.sunV.v, 0, 1), pl = S.fgPlates.dawn || S.fgPlates.night, hy = S.horizon * S.H, x = S.W * 0.53;
 if (pl && pl.rect) {
 hy = (pl.rect.y + (pl.top === undefined ? 0.66 : pl.top) * pl.rect.h) / S.dpr;
 x = (pl.rect.x + 0.657 * pl.rect.w) / S.dpr;
 }
-return { e: e, x: x, y: lerp(hy + 0.11 * S.H, hy - 0.085 * S.H, e), hy: hy };
+hy += S.cam.sky / S.dpr;
+return { e: e, x: x, y: lerp(hy + 0.04 * S.H, hy - 0.085 * S.H, e), hy: hy };
 }
 function drawSun(g) {
 if (S.sunV.v < 0.005) return;
-var p = sunPos(), e = p.e, d = S.dpr, keep = 1 - 0.62 * S.weights.morning.v;
+var p = sunPos(), e = p.e, d = S.dpr, keep = 1 - 0.3 * S.weights.morning.v;
+var pre = 1 - Math.pow(1 - clamp(S.sunV.v * 3, 0, 1), 2);
 g.globalCompositeOperation = 'lighter';
 var bh = 0.62 * S.H * d;
-g.globalAlpha = Math.min(1, 0.34 * e * keep);
+g.globalAlpha = Math.min(1, (0.46 - 0.12 * e) * pre * keep);
 g.drawImage(S.band, 0, (p.hy + 0.1 * S.H) * d - bh, S.cw, bh);
 var R = Math.max(S.W, S.H * 0.74) * (0.5 + 0.3 * e) * d;
-g.globalAlpha = Math.min(1, 0.34 * e * keep);
+g.globalAlpha = Math.min(1, 0.34 * pre * keep);
 g.drawImage(S.glow, p.x * d - R, p.y * d - R, R * 2, R * 2);
 var rr = R * 1.26;
 g.save();
@@ -977,7 +1057,7 @@ g.globalAlpha = 0.14 * e * keep;
 g.drawImage(S.rays, -rr, -rr, rr * 2, rr * 2);
 g.restore();
 var dr = (0.13 * Math.min(S.W, S.H * 0.6) + 12) * d;
-g.globalAlpha = Math.min(1, e * 1.5) * (1 - 0.5 * S.weights.morning.v);
+g.globalAlpha = Math.min(1, e * 1.5) * (1 - 0.12 * S.weights.morning.v);
 g.drawImage(S.disc, p.x * d - dr, p.y * d - dr, dr * 2, dr * 2);
 g.globalAlpha = 1;
 g.globalCompositeOperation = 'source-over';
@@ -994,7 +1074,7 @@ if (dy < maxDy) dy = maxDy;
 s = Math.max(W / pl.w, H / pl.h) * over;
 dy = H - pl.h * s;
 }
-return { s: s, x: (W - pl.w * s) / 2, y: dy, w: pl.w * s, h: pl.h * s };
+return { s: s, x: (W - pl.w * s) / 2, y: dy + (pl.shift || 0) * pl.h * s, w: pl.w * s, h: pl.h * s };
 }
 function drawFgOne(g, kind, a, ox, oy) {
 var pl = S.fgPlates[kind], pf = pl ? pl.fade.v : 0, proc = S.fgProc[kind] || (kind === 'dawn' ? null : S.fgProc.night);
@@ -1010,7 +1090,7 @@ g.drawImage(pl.img, r.x + ox, r.y + oy, r.w, r.h);
 if (pl.mist) {
 var my = r.y + oy + pl.mist.y * r.s, mh = pl.mist.h * r.s;
 g.drawImage(pl.mist.c, r.x + ox, my, r.w, mh);
-var lit = ease(clamp(S.sunV.v, 0, 1)) * 0.72;
+var lit = ease(clamp(S.sunV.v, 0, 1)) * 0.5;
 if (lit > 0.01) {
 g.globalAlpha = a * pf * lit;
 g.drawImage(pl.mist.lit, r.x + ox, my, r.w, mh);
@@ -1021,29 +1101,55 @@ pl.rect = r;
 g.globalAlpha = 1;
 }
 function drawForeground(g) {
-var ox = S.px * 13 * S.dpr, oy = Math.max(0, S.py * 3 * S.dpr);
+var ox = S.px * 13 * S.dpr, oy = Math.max(0, S.py * 3 * S.dpr) + S.cam.fg;
 var dawn = clamp(S.weights.predawn.v * 0.12 + S.weights.dawn.v + S.weights.morning.v, 0, 1);
 dawn = Math.max(dawn, ease(clamp(S.sunV.v, 0, 1)));
-if (dawn < 0.995) drawFgOne(g, 'night', 1, ox, oy);
-if (dawn > 0.005) drawFgOne(g, 'dawn', dawn, ox, oy);
-return { ox: ox, oy: oy, dawn: dawn };
+var gone = S.cam.fg >= S.cam.fgMax - 0.5;
+if (!gone && dawn < 0.995) {
+drawFgOne(g, 'night', 1, ox, oy);
+drawPatches(g, ox, oy);
+}
+if (!gone && dawn > 0.005) drawFgOne(g, 'dawn', dawn, ox, oy);
+return { ox: ox, oy: oy, dawn: dawn, gone: gone };
+}
+function drawPatches(g, ox, oy) {
+var pl = S.fgPlates.night, from = pl && pl.rect, list = pl && pl.lights;
+if (!from || !list || pl.fade.v <= 0.5) return;
+for (var i = 0; i < list.length; i++) {
+var l = list[i];
+if (!l.patch) continue;
+var out = lightOut(l, from.y + l.v * from.h);
+if (out < 0.01) continue;
+g.globalAlpha = out;
+g.drawImage(l.patch, from.x + l.box[0] * from.w + ox, from.y + l.box[1] * from.h + oy, l.box[2] * from.w, l.box[3] * from.h);
+}
+g.globalAlpha = 1;
+}
+function lightOut(l, y) {
+if (l.k === 0) return 0;
+var exit = clamp((S.ch - y) / (S.cam.fgMax || S.ch), 0.1, 1);
+var k = l.k === undefined ? 0.3 + (l.p * 0.37 % 1) * 0.6 : l.k, at = k * exit;
+return sstep(at, at + 0.02, S.cam.late);
 }
 function drawLights(g, fg) {
 var night = 1 - fg.dawn, pl = S.fgPlates.night;
-if (night < 0.03) return;
+if (night < 0.03 || fg.gone) return;
 var list = (pl && pl.fade.v > 0.5) ? pl.lights : S.lights;
 if (!list || !list.length) return;
+var d = S.dpr, i, l, x, y, out, r;
+var from = pl && pl.rect;
 g.globalCompositeOperation = 'lighter';
-var d = S.dpr;
-for (var i = 0; i < list.length; i++) {
-var l = list[i], x, y;
+for (i = 0; i < list.length; i++) {
+l = list[i];
 if (l.u !== undefined) {
-if (!pl.rect) continue;
-x = pl.rect.x + l.u * pl.rect.w + fg.ox; y = pl.rect.y + l.v * pl.rect.h + fg.oy;
-} else { x = l.x * S.cw + fg.ox; y = l.y * S.ch + fg.oy; }
-var br = 0.26 + 0.12 * Math.sin(S.T * l.f + l.p);
-var r = l.r * d;
-g.globalAlpha = br * night;
+if (!from) continue;
+x = from.x + l.u * from.w + fg.ox; y = from.y + l.v * from.h;
+} else { x = l.x * S.cw + fg.ox; y = l.y * S.ch; }
+out = lightOut(l, y);
+y += fg.oy;
+r = l.r * d;
+if (out > 0.99 || y > S.ch + r) continue;
+g.globalAlpha = (0.42 + 0.16 * Math.sin(S.T * l.f + l.p)) * night * (1 - out);
 g.drawImage(S.warmSpot, x - r, y - r, r * 2, r * 2);
 }
 g.globalAlpha = 1;
@@ -1102,8 +1208,33 @@ g.fillRect(0, 0, S.cw, S.ch);
 }
 g.globalAlpha = 1;
 }
+function fgTravel() {
+var best = 0;
+for (var i = 0; i < FG_KINDS.length; i++) {
+var pl = S.fgPlates[FG_KINDS[i]];
+if (!pl) continue;
+var r = fgRect(pl);
+pl.rect = r;
+best = Math.max(best, S.ch - (r.y + (pl.ink === undefined ? 0.5 : pl.ink) * r.h));
+}
+var n = S.fgPlates.night;
+if (!n || n.fade.v < 1) best = Math.max(best, S.H * 0.5 * S.dpr);
+return Math.max(best + 6 * S.dpr, CAM.pan * S.ch * CAM.fgMin);
+}
+function updateCam(dt) {
+var to = S.camV.v, c = S.cam;
+S.camS += (to - S.camS) * (1 - Math.exp(-dt * 8));
+if (Math.abs(to - S.camS) < 0.0004) S.camS = to;
+c.sky = CAM.pan * S.ch * S.camS;
+c.fgMax = fgTravel();
+c.fg = c.fgMax * S.camS;
+var after = clamp(S.weights.predawn.v + S.weights.dawn.v + S.weights.morning.v, 0, 1);
+S.lateHold = after > 0.01 ? Math.max(S.lateHold, S.camS) : 0;
+c.late = Math.max(S.camS, after, S.lateHold);
+}
 function drawFrame(dt) {
 var g = S.ctx;
+updateCam(dt);
 var vis = amount('stars') * S.starsV.v * (1 - clamp(S.sunV.v, 0, 1));
 drawSky(g);
 drawMilky(g, vis);
@@ -1136,11 +1267,11 @@ if (!(raw > 0)) return;
 var dt = Math.min(0.1, raw);
 S.T += dt;
 NAMES.forEach(function (n) { S.weights[n].step(dt); });
-S.starsV.step(dt); S.bloomV.step(dt); S.sunV.step(dt); S.dimV.step(dt); S.introV.step(dt);
+S.starsV.step(dt); S.bloomV.step(dt); S.sunV.step(dt); S.dimV.step(dt); S.introV.step(dt); S.camV.step(dt);
 var key;
 for (key in S.plates) S.plates[key].fade.step(dt);
 for (key in S.fgPlates) S.fgPlates[key].fade.step(dt);
-S.cloudX += dt * (S.reduced ? 0 : 5);
+S.cloudX += dt * (S.reduced ? 0 : 3.2);
 updateParallax(dt, now);
 watchFps(raw);
 try { drawFrame(dt); } catch (e) { if (!S.warned) { S.warned = true; if (root.console) console.warn('sky', e); } }
@@ -1175,10 +1306,11 @@ S.inited = true;
 S.canvas = canvas;
 S.ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 S.plateUrls = opts.plates || null;
+S.plateMax = opts.holdPlates ? 0 : 99;
 S.reduced = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
 NAMES.forEach(function (n) { S.weights[n] = new Tween(n === 'night' ? 1 : 0); });
 S.starsV = new Tween(1); S.bloomV = new Tween(0); S.sunV = new Tween(0);
-S.dimV = new Tween(0); S.introV = new Tween(1);
+S.dimV = new Tween(0); S.introV = new Tween(1); S.camV = new Tween(0);
 S.introV.go(0, S.reduced ? 0.4 : 1.8);
 buildSprites();
 rebuild();
@@ -1208,9 +1340,34 @@ NAMES.forEach(function (n) { S.weights[n].go(n === name ? 1 : 0, d); });
 },
 stars: function (v, seconds) { S.starsV.go(clamp(v, 0, 2), seconds === undefined ? 2 : seconds); },
 bloom: function (seconds, v) { S.bloomV.go(v === undefined ? 1 : clamp(v, 0, 1), seconds === undefined ? 4 : seconds); },
-shoot: function () {
+camera: function (v, seconds) {
+if (v === undefined) return S.camS;
+var to = clamp(v, 0, 1), d = seconds === undefined ? 2.5 : seconds;
+if (S.reduced) d = Math.min(d, 0.4);
+S.camV.go(to, d);
+if (S.camV.d === 0) S.camS = to;
+return Sky;
+},
+plates: function (n) {
+S.plateMax = n === undefined ? 99 : Math.max(S.plateMax, n);
+if (S.pump) S.pump();
+},
+fgPoint: function (a) {
+var pl = S.fgPlates.dawn || S.fgPlates.night, d = S.dpr || 1;
+var ox = S.px * 13, oy = Math.max(0, S.py * 3) + S.cam.fg / d;
+if (pl && a[pl.set]) {
+var r = fgRect(pl), q = a[pl.set];
+return { x: (r.x + q[0] * r.w) / d + ox, y: (r.y + q[1] * r.h) / d + oy, w: q[2] * r.s / d };
+}
+if (S.ridge && a.proc) {
+var x = S.W * a.proc[S.W > S.H * 1.05 ? 1 : 0];
+return { x: x + ox, y: S.ridge(x) + 2 + oy, w: Math.min(S.W * 0.3, 150) };
+}
+return null;
+},
+shoot: function (scale) {
 var W = S.W, H = S.H, dir = Math.random() < 0.5 ? -1 : 1;
-var len = Math.min(W, H) * (0.3 + Math.random() * 0.16);
+var len = Math.min(W, H) * (0.3 + Math.random() * 0.16) * (scale || 1);
 S.meteors.push({
 x: W * (dir < 0 ? 0.62 + Math.random() * 0.24 : 0.14 + Math.random() * 0.24),
 y: H * (0.08 + Math.random() * 0.16),
@@ -1222,24 +1379,31 @@ sun: function (v, seconds) { S.sunV.go(clamp(v, 0, 1), seconds === undefined ? 6
 dim: function (v, seconds) { S.dimV.go(clamp(v, 0, 1), seconds === undefined ? 1.2 : seconds); },
 reset: function (seconds) {
 var d = seconds === undefined ? 1.5 : seconds;
-Sky.to('night', d); Sky.stars(1, d); Sky.bloom(d, 0); Sky.sun(0, d); Sky.dim(0, d);
+Sky.to('night', d); Sky.stars(1, d); Sky.bloom(d, 0); Sky.sun(0, d); Sky.dim(0, d); Sky.camera(0, d);
 },
 _state: function () {
 return {
 fps: Math.round(S.fps), quality: S.quality, noDrop: !!S.noDrop, dpr: S.dpr, cw: S.cw, ch: S.ch,
 plates: Object.keys(S.plates), fg: Object.keys(S.fgPlates), failed: Object.keys(S.failed),
-proc: Object.keys(S.proc), idleLeft: S.idleQueue.length, horizon: S.horizon
+proc: Object.keys(S.proc), idleLeft: S.idleQueue.length, horizon: S.horizon, dim: S.dimV.v, dimTo: S.dimV.d > 0 ? S.dimV.b : S.dimV.v,
+cam: S.camS, camTo: S.camV.d > 0 ? S.camV.b : S.camV.v, skyPx: S.cam.sky / S.dpr, fgPx: S.cam.fg / S.dpr,
+fgTravel: S.cam.fgMax / S.dpr, roofOut: S.cam.fg >= S.cam.fgMax - 0.5, late: S.cam.late,
+lights: ((S.fgPlates.night && S.fgPlates.night.lights) || S.lights).map(function (l) {
+return l.u === undefined ? { x: l.x, y: l.y } : { u: +l.u.toFixed(3), v: +l.v.toFixed(3), k: +l.k.toFixed(2), r: +l.r.toFixed(1) };
+})
 };
 }
 };
 root.Sky = Sky;
 })(window);</script>
-<script>window.__BOOT={"mode":"enc","bin":"a.bin?v=b32ccc181b","iter":150000,"plates":{"portrait":{"night":"img/portrait/night.webp","deep":"img/portrait/deep.webp","predawn":"img/portrait/predawn.webp","dawn":"img/portrait/dawn.webp","fg-night":"img/portrait/fg-night.webp","fg-dawn":"img/portrait/fg-dawn.webp"},"landscape":{"night":"img/landscape/night.webp","deep":"img/landscape/deep.webp","predawn":"img/landscape/predawn.webp","dawn":"img/landscape/dawn.webp","fg-night":"img/landscape/fg-night.webp","fg-dawn":"img/landscape/fg-dawn.webp"}},"fonts":["Noto Serif SC 924","LXGW WenKai 924"]};</script>
+<script>window.__BOOT={"mode":"enc","bin":"a.bin?v=38f161b41d","iter":150000,"plates":{"portrait":{"night":"img/portrait/night.webp","deep":"img/portrait/deep.webp","predawn":"img/portrait/predawn.webp","dawn":"img/portrait/dawn.webp","fg-night":"img/portrait/fg-night.webp","fg-dawn":"img/portrait/fg-dawn.webp"},"landscape":{"night":"img/landscape/night.webp","deep":"img/landscape/deep.webp","predawn":"img/landscape/predawn.webp","dawn":"img/landscape/dawn.webp","fg-night":"img/landscape/fg-night.webp","fg-dawn":"img/landscape/fg-dawn.webp"}},"fonts":["Noto Serif SC 924","LXGW WenKai 924"]};</script>
 <script>(function () {
 'use strict';
 var B = window.__BOOT || {};
 var ITER = B.iter || 150000;
 var HOLD = 1500;
+var STALL = 15000;
+var HARD = 120000;
 var WRONG = [
 '不对。再想想那天晚上。',
 '不对。你当时说得可肯定了。',
@@ -1250,10 +1414,21 @@ var NET = '网不太好，再点一次。';
 function $(id) { return document.getElementById(id); }
 function noop() {}
 var door = $('door'), form = $('gate'), input = $('code'), btn = $('go'), msg = $('msg'), field = $('field');
-var fails = 0, busy = false, binPromise = null, sound = false;
+var fails = 0, busy = false, binPromise = null, sound = false, silentOk = false;
+var encMode = B.mode !== 'plain' && !!B.bin, meteorT = 0;
 if (window.Sky) {
-try { window.Sky.init($('sky'), { plates: B.plates || null }); } catch (e) {  }
+try { window.Sky.init($('sky'), { plates: B.plates || null, holdPlates: encMode }); } catch (e) {  }
 }
+function releasePlates(n) {
+try { if (window.Sky && window.Sky.plates) window.Sky.plates(n); } catch (e) { noop(); }
+}
+function idleMeteor(ms) {
+meteorT = setTimeout(function () {
+try { if (!document.hidden) window.Sky.shoot(0.6); } catch (e) { noop(); }
+idleMeteor(14000 + Math.random() * 8000);
+}, ms);
+}
+if (window.Sky && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) idleMeteor(2400);
 function silentWav() {
 var n = 1600, h = new Uint8Array(44 + n), v = new DataView(h.buffer);
 function str(o, s) { for (var i = 0; i < s.length; i++) h[o + i] = s.charCodeAt(i); }
@@ -1282,19 +1457,31 @@ var s = ac.createBufferSource();
 s.buffer = ac.createBuffer(1, 1, 22050);
 s.connect(ac.destination);
 s.start(0);
-if (!navigator.audioSession && /iPhone|iPad|iPod/.test(navigator.userAgent || '')) {
-var a = document.createElement('audio');
+}
+if (!silentOk && !navigator.audioSession && /iPhone|iPad|iPod/.test(navigator.userAgent || '')) {
+var a = window.__silent;
+if (!a) {
+a = document.createElement('audio');
 a.setAttribute('playsinline', '');
 a.setAttribute('x-webkit-airplay', 'deny');
 a.loop = true;
 a.src = silentWav();
-var q = a.play();
-if (q && q.catch) q.catch(noop);
 window.__silent = a;
 }
+var q = a.play();
+if (q && q.then) q.then(function () { silentOk = true; }, noop);
+else silentOk = true;
 }
 } catch (e) { noop(); }
 }
+document.addEventListener('visibilitychange', function () {
+var a = window.__silent;
+if (!a || !silentOk) return;
+try {
+if (document.hidden) a.pause();
+else { var q = a.play(); if (q && q.catch) q.catch(noop); }
+} catch (e) { noop(); }
+});
 ['touchend', 'pointerup', 'click', 'keydown'].forEach(function (ev) {
 document.addEventListener(ev, unlock, { capture: true, passive: true });
 });
@@ -1304,16 +1491,62 @@ try { s = s.normalize('NFKC'); } catch (e) { noop(); }
 try { return s.replace(new RegExp('[\\s\\p{P}\\p{S}]', 'gu'), ''); }
 catch (e) { return s.replace(/[\s,.!?;:'"`~()\[\]{}<>\-_+=*&^%$#@\/\\|，。！？；：、“”‘’（）《》【】…—·～]/g, ''); }
 }
+function readBin() {
+var ctl = window.AbortController ? new AbortController() : null;
+return new Promise(function (ok, no) {
+var dog = 0, over = false;
+function stop() { over = true; clearTimeout(dog); }
+function arm(ms) {
+clearTimeout(dog);
+dog = setTimeout(function () {
+if (over) return;
+stop();
+var e = new Error('net');
+e.stall = true;
+no(e);
+if (ctl) { try { ctl.abort(); } catch (x) { noop(); } }
+}, ms);
+}
+arm(STALL);
+fetch(B.bin, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
+if (!r.ok) throw new Error('net');
+if (!r.body || !r.body.getReader) { arm(HARD); return r.arrayBuffer(); }
+var rd = r.body.getReader(), parts = [], size = 0;
+function pull() {
+return rd.read().then(function (x) {
+if (x.done) {
+var u = new Uint8Array(size), at = 0;
+parts.forEach(function (p) { u.set(p, at); at += p.length; });
+return u.buffer;
+}
+parts.push(x.value);
+size += x.value.length;
+arm(STALL);
+return pull();
+});
+}
+return pull();
+}).then(function (buf) {
+if (over) return;
+stop();
+ok(buf);
+}, function (e) {
+if (over) return;
+stop();
+no(e);
+});
+});
+}
 function getBin(retry) {
 if (!binPromise) {
-binPromise = fetch(B.bin).then(function (r) {
-if (!r.ok) throw new Error('net');
-return r.arrayBuffer();
-});
+binPromise = readBin();
 binPromise.catch(function () { binPromise = null; });
 }
 if (retry) {
-return binPromise.catch(function () { return getBin(retry - 1); });
+return binPromise.catch(function (e) {
+if (e && e.stall) throw e;
+return getBin(retry - 1);
+});
 }
 return binPromise;
 }
@@ -1359,11 +1592,60 @@ field.classList.remove('shake');
 void field.offsetWidth;
 field.classList.add('shake');
 }
+var artCache = {}, artTimer = 0;
+function artSet() { return window.innerWidth > window.innerHeight * 1.05 ? 'landscape' : 'portrait'; }
+function artUrl(name) {
+var all = (window.MEDIA924 && window.MEDIA924.art) || {}, set = artSet();
+var other = set === 'landscape' ? 'portrait' : 'landscape';
+return (all[set] && all[set][name]) || (all[other] && all[other][name]) || '';
+}
+function artAlias(m) {
+var art = m.art || {};
+m.desk = {};
+m.cake2 = {};
+Object.keys(art).forEach(function (set) {
+m.desk[set] = { lit: art[set]['desk-lit'], dark: art[set]['desk-dark'] };
+m.cake2[set] = art[set].cake2;
+});
+}
+function artReady(name) {
+var url = artUrl(name);
+if (!url) return Promise.resolve(null);
+if (artCache[url]) return artCache[url];
+artCache[url] = new Promise(function (ok) {
+var im = new Image();
+im.decoding = 'async';
+im.onload = function () {
+var fin = function () { ok(im); };
+if (im.decode) im.decode().then(fin, fin); else fin();
+};
+im.onerror = function () { delete artCache[url]; ok(null); };
+im.src = url;
+});
+return artCache[url];
+}
+function artPreload() {
+var all = (window.MEDIA924 && window.MEDIA924.art) || {}, chain = Promise.resolve();
+Object.keys(all[artSet()] || {}).forEach(function (name) {
+chain = chain.then(function () { return artReady(name); });
+});
+return chain;
+}
+window.Art924 = { url: artUrl, ready: artReady, preload: artPreload };
 function inject(b) {
 window.APP924_MANUAL = true;
 window.PORTRAIT = b.portrait || '';
+window.PORTRAIT_BASE = b.portraitBase || '';
 window.PORTRAIT_MASK = b.portraitMask || '';
-if (b.media) window.MEDIA924 = b.media;
+if (b.media) {
+window.MEDIA924 = b.media;
+artAlias(b.media);
+}
+artPreload();
+window.addEventListener('resize', function () {
+clearTimeout(artTimer);
+artTimer = setTimeout(artPreload, 400);
+});
 var st = document.createElement('style');
 st.textContent = b.css || '';
 document.head.appendChild(st);
@@ -1383,6 +1665,7 @@ new Promise(function (ok) { setTimeout(ok, 1500); })
 }
 function enter(b) {
 var since = Date.now();
+clearTimeout(meteorT);
 document.body.classList.add('open');
 show(RIGHT, true);
 input.blur();
@@ -1446,7 +1729,11 @@ if (window.visualViewport) {
 window.visualViewport.addEventListener('resize', fit);
 window.visualViewport.addEventListener('scroll', fit);
 }
-if (B.mode !== 'plain' && B.bin) { getBin().catch(noop); }
+if (encMode) {
+var firstTwo = setTimeout(function () { releasePlates(2); }, 3000);
+var all = function () { clearTimeout(firstTwo); releasePlates(); };
+getBin().then(all, all);
+}
 })();</script>
 </body>
 </html>
