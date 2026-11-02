@@ -617,6 +617,7 @@ if (key.indexOf('fg-') === 0) {
 S.fgPlates[key.slice(3)] = pl;
 measureFg(pl);
 if (key === 'fg-night') detectLights(pl);
+if (key === 'fg-dawn') makeMist(pl);
 } else {
 S.plates[key] = pl;
 if (key === 'dawn') makeMorning(pl);
@@ -647,6 +648,84 @@ if (cnt > w * 0.3) top = y;
 }
 pl.top = top / h;
 } catch (e) { pl.top = 0.7; }
+}
+function makeMist(pl) {
+try {
+var w = pl.w, h = pl.h, top = pl.top === undefined ? 0.67 : pl.top;
+var y0 = Math.max(0, Math.round(h * (top - 0.1))), bh = Math.min(h - y0, Math.round(h * 0.2));
+var c = mk(w, bh), g = c.getContext('2d');
+g.drawImage(pl.img, 0, -y0);
+var im = g.getImageData(0, 0, w, bh), d = im.data;
+var lum = function (i) { return 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; };
+var sky = [], dark = [], x, y, i, k;
+var xa = w, xb = -1;
+for (x = 0; x < w; x++) {
+sky[x] = -1;
+for (y = 0; y < bh; y++) if (d[(y * w + x) * 4 + 3] > 128) { sky[x] = y; break; }
+var cnt = 0;
+if (sky[x] >= 0) for (y = sky[x]; y < Math.min(bh, sky[x] + 14); y++) if (lum((y * w + x) * 4) < 95) cnt++;
+dark[x] = cnt >= 7;
+if (dark[x]) { xa = Math.min(xa, x); xb = Math.max(xb, x); }
+}
+var last = -1;
+for (x = 0; x < w; x++) {
+if (sky[x] >= 0 && !dark[x]) { last = sky[x]; continue; }
+var nx = x;
+while (nx < w && (sky[nx] < 0 || dark[nx])) nx++;
+var fill = nx < w ? (last < 0 ? sky[nx] : Math.min(last, sky[nx])) : last;
+sky[x] = fill < 0 ? 0 : fill;
+}
+var R1 = Math.round(w * 0.02), R2 = Math.round(w * 0.05), hi = [], base = [];
+for (x = 0; x < w; x++) {
+var m = bh;
+for (k = Math.max(0, x - R1); k <= Math.min(w - 1, x + R1); k++) m = Math.min(m, sky[k]);
+hi[x] = m;
+}
+for (x = 0; x < w; x++) {
+var sum = 0, n = 0;
+for (k = Math.max(0, x - R2); k <= Math.min(w - 1, x + R2); k++) { sum += hi[k]; n++; }
+base[x] = sum / n;
+}
+var rr = 0, gg = 0, bb = 0, cn = 0;
+for (x = 0; x < w; x += 3) {
+if (x >= xa - 40 && x <= xb + 40) continue;
+for (y = Math.round(base[x]) + 34; y < Math.round(base[x]) + 46 && y < bh; y++) {
+i = (y * w + x) * 4;
+if (y >= 0 && d[i + 3] > 200) { rr += d[i]; gg += d[i + 1]; bb += d[i + 2]; cn++; }
+}
+}
+if (!cn) return;
+rr /= cn; gg /= cn; bb /= cn;
+var person = new Uint8Array(w * bh), pad = 44, grow = 1;
+for (y = 0; y < bh; y++) {
+for (x = Math.max(0, xa - pad); x <= Math.min(w - 1, xb + pad); x++) {
+i = (y * w + x) * 4;
+if (d[i + 3] > 40 && lum(i) < 110) {
+for (var yy = Math.max(0, y - grow); yy <= Math.min(bh - 1, y + grow); yy++) {
+for (var xx = Math.max(0, x - grow); xx <= Math.min(w - 1, x + grow); xx++) person[yy * w + xx] = 1;
+}
+}
+}
+}
+var up = Math.max(h * 0.04, w * 0.05), down = h * 0.055, A = 0.94;
+var soft = function (t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+for (y = 0; y < bh; y++) {
+for (x = 0; x < w; x++) {
+i = (y * w + x) * 4;
+var u = y - base[x];
+var al = u < 0 ? A * soft(1 + u / up) : A * (1 - soft(u / down));
+if (person[y * w + x]) al = 0;
+d[i] = rr; d[i + 1] = gg; d[i + 2] = bb; d[i + 3] = al * 255;
+}
+}
+g.putImageData(im, 0, 0);
+var c2 = mk(w, bh), g2 = c2.getContext('2d');
+g2.drawImage(c, 0, 0);
+g2.globalCompositeOperation = 'source-in';
+g2.fillStyle = 'rgb(255,224,196)';
+g2.fillRect(0, 0, w, bh);
+pl.mist = { c: c, lit: c2, y: y0, h: bh };
+} catch (e) { pl.mist = null; }
 }
 function detectLights(pl) {
 try {
@@ -928,6 +1007,15 @@ if (pl && pf > 0 && a > 0) {
 var r = fgRect(pl);
 g.globalAlpha = a * pf;
 g.drawImage(pl.img, r.x + ox, r.y + oy, r.w, r.h);
+if (pl.mist) {
+var my = r.y + oy + pl.mist.y * r.s, mh = pl.mist.h * r.s;
+g.drawImage(pl.mist.c, r.x + ox, my, r.w, mh);
+var lit = ease(clamp(S.sunV.v, 0, 1)) * 0.72;
+if (lit > 0.01) {
+g.globalAlpha = a * pf * lit;
+g.drawImage(pl.mist.lit, r.x + ox, my, r.w, mh);
+}
+}
 pl.rect = r;
 }
 g.globalAlpha = 1;
@@ -1146,7 +1234,7 @@ proc: Object.keys(S.proc), idleLeft: S.idleQueue.length, horizon: S.horizon
 };
 root.Sky = Sky;
 })(window);</script>
-<script>window.__BOOT={"mode":"enc","bin":"a.bin?v=528da2c422","iter":150000,"plates":{"portrait":{"night":"img/portrait/night.webp","deep":"img/portrait/deep.webp","predawn":"img/portrait/predawn.webp","dawn":"img/portrait/dawn.webp","fg-night":"img/portrait/fg-night.webp","fg-dawn":"img/portrait/fg-dawn.webp"},"landscape":{"night":"img/landscape/night.webp","deep":"img/landscape/deep.webp","predawn":"img/landscape/predawn.webp","dawn":"img/landscape/dawn.webp","fg-night":"img/landscape/fg-night.webp","fg-dawn":"img/landscape/fg-dawn.webp"}},"fonts":["Noto Serif SC 924","LXGW WenKai 924"]};</script>
+<script>window.__BOOT={"mode":"enc","bin":"a.bin?v=b32ccc181b","iter":150000,"plates":{"portrait":{"night":"img/portrait/night.webp","deep":"img/portrait/deep.webp","predawn":"img/portrait/predawn.webp","dawn":"img/portrait/dawn.webp","fg-night":"img/portrait/fg-night.webp","fg-dawn":"img/portrait/fg-dawn.webp"},"landscape":{"night":"img/landscape/night.webp","deep":"img/landscape/deep.webp","predawn":"img/landscape/predawn.webp","dawn":"img/landscape/dawn.webp","fg-night":"img/landscape/fg-night.webp","fg-dawn":"img/landscape/fg-dawn.webp"}},"fonts":["Noto Serif SC 924","LXGW WenKai 924"]};</script>
 <script>(function () {
 'use strict';
 var B = window.__BOOT || {};
