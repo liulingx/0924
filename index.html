@@ -1396,7 +1396,7 @@ return l.u === undefined ? { x: l.x, y: l.y } : { u: +l.u.toFixed(3), v: +l.v.to
 };
 root.Sky = Sky;
 })(window);</script>
-<script>window.__BOOT={"mode":"enc","bin":"a.bin?v=38f161b41d","iter":150000,"plates":{"portrait":{"night":"img/portrait/night.webp","deep":"img/portrait/deep.webp","predawn":"img/portrait/predawn.webp","dawn":"img/portrait/dawn.webp","fg-night":"img/portrait/fg-night.webp","fg-dawn":"img/portrait/fg-dawn.webp"},"landscape":{"night":"img/landscape/night.webp","deep":"img/landscape/deep.webp","predawn":"img/landscape/predawn.webp","dawn":"img/landscape/dawn.webp","fg-night":"img/landscape/fg-night.webp","fg-dawn":"img/landscape/fg-dawn.webp"}},"fonts":["Noto Serif SC 924","LXGW WenKai 924"]};</script>
+<script>window.__BOOT={"mode":"enc","bin":"a.bin?v=9b8d45fc48","iter":150000,"plates":{"portrait":{"night":"img/portrait/night.webp","deep":"img/portrait/deep.webp","predawn":"img/portrait/predawn.webp","dawn":"img/portrait/dawn.webp","fg-night":"img/portrait/fg-night.webp","fg-dawn":"img/portrait/fg-dawn.webp"},"landscape":{"night":"img/landscape/night.webp","deep":"img/landscape/deep.webp","predawn":"img/landscape/predawn.webp","dawn":"img/landscape/dawn.webp","fg-night":"img/landscape/fg-night.webp","fg-dawn":"img/landscape/fg-dawn.webp"}},"fonts":["Noto Serif SC 924","LXGW WenKai 924"]};</script>
 <script>(function () {
 'use strict';
 var B = window.__BOOT || {};
@@ -1608,8 +1608,8 @@ m.desk[set] = { lit: art[set]['desk-lit'], dark: art[set]['desk-dark'] };
 m.cake2[set] = art[set].cake2;
 });
 }
-function artReady(name) {
-var url = artUrl(name);
+function artReady(name) { return imgReady(artUrl(name)); }
+function imgReady(url) {
 if (!url) return Promise.resolve(null);
 if (artCache[url]) return artCache[url];
 artCache[url] = new Promise(function (ok) {
@@ -1631,7 +1631,12 @@ chain = chain.then(function () { return artReady(name); });
 });
 return chain;
 }
-window.Art924 = { url: artUrl, ready: artReady, preload: artPreload };
+function worldUrl(id) {
+var all = (window.MEDIA924 && window.MEDIA924.world) || {};
+return all[id] || '';
+}
+function worldReady(id) { return imgReady(worldUrl(id)); }
+window.Art924 = { url: artUrl, ready: artReady, preload: artPreload, worldUrl: worldUrl, worldReady: worldReady };
 function inject(b) {
 window.APP924_MANUAL = true;
 window.PORTRAIT = b.portrait || '';
